@@ -77,9 +77,7 @@ For the program to work, you need to enable data transmission in IL-2:
 ### Usage
 Launch IL2_Haptic_Feedback.exe.
 Select your joystick from the dropdown list and click CONNECT.
-the game. The status in the application will change to "СОЕДИНЕНИЕ УСТАНОВЛЕНО" as soon as a mission starts.
-
-
 Adjust the desired vibration levels using the sliders (saved automatically).
+Launch the game. The status in the application will change to "СОЕДИНЕНИЕ УСТАНОВЛЕНО" as soon as a mission starts.
 
-Launch <img width="303" height="452" alt="Снимок экрана 2026-03-31 160524" src="https://github.com/user-attachments/assets/5fc70b88-74ec-4915-95b0-a51fbc285c9a" />
+<img width="303" height="452" alt="Снимок экрана 2026-03-31 160524" src="https://github.com/user-attachments/assets/5fc70b88-74ec-4915-95b0-a51fbc285c9a" />
