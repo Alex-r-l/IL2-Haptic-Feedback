@@ -38,6 +38,9 @@
 Настройте желаемые уровни вибрации ползунками (сохраняются автоматически).
 Запустите игру. Статус в приложении изменится на "СОЕДИНЕНИЕ УСТАНОВЛЕНО", как только начнется вылет.
 
+### Примечание
+В свободном доступе расшифровки телеметрии ИЛ-2 нет, в данной утилите реализовано только то что мне удалось расшифровать.
+
 -----------------------------------------------------------------------------------------------------------------
 README_EN.md (English Version)
 # IL-2 Haptic Feedback v1.5
@@ -79,5 +82,8 @@ Launch IL2_Haptic_Feedback.exe.
 Select your joystick from the dropdown list and click CONNECT.
 Adjust the desired vibration levels using the sliders (saved automatically).
 Launch the game. The status in the application will change to "СОЕДИНЕНИЕ УСТАНОВЛЕНО" as soon as a mission starts.
+
+### Note
+There is no publicly available decryption of IL-2 telemetry; this utility only implements what I was able to decrypt.
 
 <img width="303" height="452" alt="Снимок экрана 2026-03-31 160524" src="https://github.com/user-attachments/assets/5fc70b88-74ec-4915-95b0-a51fbc285c9a" />
