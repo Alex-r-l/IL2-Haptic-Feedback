@@ -172,7 +172,9 @@ class Il2VibroApp:
         sdl2.SDL_HapticRunEffect(self.haptic, self.eff_id, 1)
 
     def telemetry_loop(self):
-        FIRE_RANGE, DMG_MIN, DMG_MAX = (135, 165), 1000, 1600
+        FIRE_RANGES = [(135, 140), (150, 160)] 
+        DMG_MIN = 1000
+        DMG_MAX = 1600
         MAX_FFB = 32767
         last_vibe_time = 0
         last_f_l, last_f_r = 0, 0
@@ -234,14 +236,14 @@ class Il2VibroApp:
                 # --- ФИНАЛЬНЫЙ ВЫБОР ЭФФЕКТА (Приоритеты) ---
                 # Стрельба и Дамаг проверяются по длине пакета (p_len)
                 
-                # 1. СТРЕЛЬБА
-                if FIRE_RANGE[0] <= p_len <= FIRE_RANGE[1]:
+                # 1. СТРЕЛЬБА (Проверяем оба диапазона)
+                if any(low <= p_len <= high for low, high in FIRE_RANGES):
                     if self.get_mult("fire") > 0:
                         curr_pwr = MAX_FFB * self.get_mult("fire")
                         curr_len = 40 
-                
-                # 2. ДАМАГ (используем if, а не elif, чтобы не конфликтовать с p_len==131)
-                if p_len >= DMG_MIN:
+
+                # 2. ДАМАГ (Используем обычный if, чтобы он работал независимо)
+                elif p_len >= DMG_MIN:
                     if self.get_mult("damage") > 0:
                         p_len_capped = min(p_len, DMG_MAX) 
                         ratio = (p_len_capped - DMG_MIN) / (DMG_MAX - DMG_MIN)
