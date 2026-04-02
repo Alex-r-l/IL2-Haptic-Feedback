@@ -19,7 +19,7 @@
 Для работы программы необходимо включить передачу данных в ИЛ-2:
 1. Перейдите в папку с игрой, найдите файл `data/startup.cfg`.
 2. Откройте его через блокнот и добавьте (или отредактируйте) следующие секции:
-
+```
 [KEY = motiondevice]
     addr = "127.0.0.1"
     decimation = 2
@@ -31,7 +31,7 @@
     decimation = 2
     enable = true
     port = 29373
-
+```
 ### Использование
 Запустите IL2_Haptic_Feedback.exe.
 Выберите ваш джойстик в выпадающем списке и нажмите ПОДКЛЮЧИТЬ.
@@ -64,7 +64,7 @@ The utility reads telemetry data from the game and transmits it to your vibratio
 For the program to work, you need to enable data transmission in IL-2:
 1. Navigate to the game folder and locate the `data/startup.cfg` file.
 2. Open it with Notepad and add (or edit) the following sections:
-
+```
 [KEY = motiondevice]
     addr = "127.0.0.1"
     decimation = 2
@@ -76,7 +76,7 @@ For the program to work, you need to enable data transmission in IL-2:
     decimation = 2
     enable = true
     port = 29373
-
+```
 ### Usage
 Launch IL2_Haptic_Feedback.exe.
 Select your joystick from the dropdown list and click CONNECT.
