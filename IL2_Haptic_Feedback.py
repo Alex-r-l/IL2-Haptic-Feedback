@@ -356,7 +356,7 @@ class Il2VibroApp:
                         self.run_vibe(curr_pwr, max(curr_len, 60))
                         last_vibe_time = time.time()
 
-            except BlockingIOError: time.sleep(0.005)
+            except BlockingIOError: time.sleep(0.01)
             except: continue
 
     def on_close(self):
