@@ -16,7 +16,7 @@
 * **Интерфейс:** Гибкая настройка интенсивности каждого эффекта через удобный GUI.
 
 ### Настройка игры
-Для работы программы необходимо включить передачу данных в ИЛ-2:
+Для работы программы необходимо выключить обратную связь в настройках игры и включить передачу данных телеметрии в ИЛ-2:
 1. Перейдите в папку с игрой, найдите файл `data/startup.cfg`.
 2. Откройте его через блокнот и добавьте (или отредактируйте) следующие секции:
 ```
@@ -61,7 +61,7 @@ The utility reads telemetry data from the game and transmits it to your vibratio
 * **Interface:** Flexible adjustment of each effect's intensity via a convenient GUI.
 
 ### Game Setup
-For the program to work, you need to enable data transmission in IL-2:
+To use the program, you must disable feedback in the game settings and enable telemetry data transmission to the IL-2:
 1. Navigate to the game folder and locate the `data/startup.cfg` file.
 2. Open it with Notepad and add (or edit) the following sections:
 ```
