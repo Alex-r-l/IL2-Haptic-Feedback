@@ -8,12 +8,17 @@ import json
 import os
 import tkinter as tk
 from tkinter import ttk
+import hid 
 
 # --- КОНСТАНТЫ ---
 CONFIG_FILE = "config.json"
 UDP_IP = "127.0.0.1"
 UDP_PORT = 29373
-APP_VERSION = "IL-2 Haptic Feedback v1.6" # Повысил версию для поддержки разных пакетов
+APP_VERSION = "IL-2 Haptic Feedback v1.7"  # Универсальная версия с автопоиском по имени!
+
+# Рабочие границы мотора, определенные тестом
+VIBE_MIN = 18000
+VIBE_MAX = 24000
 
 DEFAULT_DATA = {
     "selected_joy": "",
@@ -28,13 +33,12 @@ RU_NAMES = {
     "flaps": "Закрылки", "gear": "Шасси", "touchdown": "Касание земли"
 }
 
-# --- ДАННЫЕ ЯЗЫКОВ ---
 LANG_DATA = {
     "RU": {
-        "joy_label": "Джойстик (Force Feedback):",
+        "joy_label": "Игровое устройство:",
         "btn_conn": "ПОДКЛЮЧИТЬ",
         "btn_refr": "ОБНОВИТЬ",
-        "btn_test": "ТЕСТ ВИБРАЦИИ (50%)",
+        "btn_test": "ТЕСТ ОТДАЧИ (50%)",
         "status_wait": "ИЛ-2: ОЖИДАНИЕ ТЕЛЕМЕТРИИ...",
         "status_ok": "ИЛ-2: СОЕДИНЕНИЕ УСТАНОВЛЕНО",
         "listen": "Слушаю телеметрию:",
@@ -42,10 +46,10 @@ LANG_DATA = {
         "names": RU_NAMES
     },
     "EN": {
-        "joy_label": "Joystick (Force Feedback):",
+        "joy_label": "Target Device:",
         "btn_conn": "CONNECT",
         "btn_refr": "REFRESH",
-        "btn_test": "VIBRATION TEST (50%)",
+        "btn_test": "FEEDBACK TEST (50%)",
         "status_wait": "IL-2: WAITING FOR TELEMETRY...",
         "status_ok": "IL-2: CONNECTION ESTABLISHED",
         "listen": "Listening telemetry:",
@@ -69,6 +73,11 @@ class Il2VibroApp:
         self.haptic = None
         self.joy = None
         self.eff_id = -1
+        
+        self.mmjoy_hid_device = None
+        self.mmjoy_hid_path = None
+        self.is_mmjoy_mode = False
+        
         self.last_packet_time = 0
         
         self.settings = self.load_config()
@@ -78,6 +87,7 @@ class Il2VibroApp:
         self.refresh_joysticks()
         
         if self.settings["selected_joy"]:
+            self.joy_combo.set(self.settings["selected_joy"])
             self.connect_haptic(self.settings["selected_joy"])
 
         threading.Thread(target=self.telemetry_loop, daemon=True).start()
@@ -114,23 +124,65 @@ class Il2VibroApp:
         self.sock.setblocking(False)
 
     def refresh_joysticks(self):
-        # При обновлении также применяем язык из комбобокса
         self.cur_lang = self.lang_combo.get()
         self.update_ui_texts()
         
         sdl2.SDL_QuitSubSystem(sdl2.SDL_INIT_JOYSTICK | sdl2.SDL_INIT_HAPTIC)
         sdl2.SDL_Init(sdl2.SDL_INIT_JOYSTICK | sdl2.SDL_INIT_HAPTIC)
-        vibration_joys = []
+        
+        all_devices = []
+        
         for i in range(sdl2.SDL_NumJoysticks()):
             j = sdl2.SDL_JoystickOpen(i)
-            if j and sdl2.SDL_JoystickIsHaptic(j):
-                vibration_joys.append(sdl2.SDL_JoystickNameForIndex(i).decode('utf-8', errors='ignore'))
-            if j: sdl2.SDL_JoystickClose(j)
-        self.joy_combo['values'] = vibration_joys
+            if j:
+                if sdl2.SDL_JoystickIsHaptic(j):
+                    name = sdl2.SDL_JoystickNameForIndex(i).decode('utf-8', errors='ignore')
+                    all_devices.append(name)
+                sdl2.SDL_JoystickClose(j)
+                
+        try:
+            for device_info in hid.enumerate():
+                if device_info['interface_number'] == 0 and device_info['product_string']:
+                    prod_name = str(device_info['product_string'])
+                    prod_name_lower = prod_name.lower()
+                    if "mmjoy" in prod_name_lower or "joystik" in prod_name_lower or "baloo" in prod_name_lower:
+                        all_devices.append(f"[MMJoy2 HID] {prod_name}")
+        except:
+            pass
+
+        self.joy_combo['values'] = all_devices
 
     def connect_haptic(self, name):
-        if self.haptic: sdl2.SDL_HapticClose(self.haptic)
-        if self.joy: sdl2.SDL_JoystickClose(self.joy)
+        if self.haptic: sdl2.SDL_HapticClose(self.haptic); self.haptic = None
+        if self.joy: sdl2.SDL_JoystickClose(self.joy); self.joy = None
+        if self.mmjoy_hid_device:
+            try: self.mmjoy_hid_device.close()
+            except: pass
+            self.mmjoy_hid_device = None
+            
+        self.is_mmjoy_mode = False
+        self.mmjoy_hid_path = None
+
+        if not name: return False
+
+        if name.startswith("[MMJoy2 HID]"):
+            clean_name = name.replace("[MMJoy2 HID] ", "")
+            try:
+                for device_info in hid.enumerate():
+                    if device_info['interface_number'] == 0 and device_info['product_string'] == clean_name:
+                        self.mmjoy_hid_path = device_info['path']
+                        break
+                
+                if self.mmjoy_hid_path:
+                    self.mmjoy_hid_device = hid.device()
+                    self.mmjoy_hid_device.open_path(self.mmjoy_hid_path)
+                    self.is_mmjoy_mode = True
+                    print(f"[УСПЕХ] Интеллектуальный HID-канал для '{clean_name}' открыт.")
+                    return True
+            except Exception as e:
+                print(f"[ОШИБКА] Не удалось открыть HID-канал: {e}")
+            return False
+
         for i in range(sdl2.SDL_NumJoysticks()):
             if sdl2.SDL_JoystickNameForIndex(i).decode('utf-8', errors='ignore') == name:
                 self.joy = sdl2.SDL_JoystickOpen(i)
@@ -147,7 +199,6 @@ class Il2VibroApp:
         main_frame = ttk.Frame(self.root, padding="15")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Верхняя панель (Название и Язык)
         top_bar = ttk.Frame(main_frame)
         top_bar.pack(fill=tk.X)
         self.lbl_joy_title = ttk.Label(top_bar, text=L["joy_label"], font=("Arial", 10, "bold"))
@@ -159,7 +210,6 @@ class Il2VibroApp:
 
         self.joy_combo = ttk.Combobox(main_frame, state="readonly")
         self.joy_combo.pack(fill=tk.X, pady=5)
-        if self.settings["selected_joy"]: self.joy_combo.set(self.settings["selected_joy"])
         
         btn_frame = ttk.Frame(main_frame)
         btn_frame.pack(fill=tk.X)
@@ -197,9 +247,9 @@ class Il2VibroApp:
         self.lbl_udp = ttk.Label(main_frame, text=f"{L['listen']} {UDP_IP}:{UDP_PORT}", font=("Arial", 9))
         self.lbl_udp.pack(pady=2)
         self.credits_label = ttk.Label(footer_frame, 
-                                  text=L["credits"], 
-                                  font=("Verdana", 8, "italic"), 
-                                  foreground="#888888")
+                                      text=L["credits"], 
+                                      font=("Verdana", 8, "italic"), 
+                                      foreground="#888888")
         self.credits_label.pack(pady=5)
 
     def update_ui_texts(self):
@@ -225,14 +275,64 @@ class Il2VibroApp:
         self.root.after(1000, self.update_status_ui)
 
     def test_vibe(self):
-        if self.haptic: self.run_vibe(16383, 1000)
-
+        # Запуск теста на 50% мощности от игрового максимума (16383)
+        self.run_vibe(16000, 1000)
+        self.root.after(1000, lambda: self.run_vibe(0, 0))
+        
     def run_vibe(self, level, length_ms):
+        level = int(max(0, min(32767, level)))
+        
+        # Интеллектуальное сжатие диапазона под физику мотора (18000 - 24000) с коррекцией нелинейности
+        if level > 0:
+            # Нормализуем вход от игры в диапазон от 0.0 до 1.0
+            normalized = level / 32767.0
+            
+            # Применяем степень 1.45, чтобы сместить физическую середину на 19500
+            corrected_ratio = normalized ** 1.5
+            
+            # Масштабируем в твой рабочий диапазон
+            scaled_level = VIBE_MIN + int(corrected_ratio * (VIBE_MAX - VIBE_MIN))
+        else:
+            scaled_level = 0
+
+        if self.is_mmjoy_mode and self.mmjoy_hid_device:
+            try:
+                # Инвертируем ШИМ (255 - полная тишина, 0 - максимальное напряжение)
+                val_8bit = (255 - int((scaled_level / 32767.0) * 255)) if scaled_level > 0 else 255
+                
+                # Защита от несрабатывания СТОП: шлем серию пакетов при выключении
+                loops = 3 if level == 0 else 1
+                
+                for _ in range(loops):
+                    buffer_packet = [1, 123, 0, 0, 0, val_8bit, val_8bit, val_8bit]
+                    while len(buffer_packet) < 37:
+                        buffer_packet.append(0)
+                    self.mmjoy_hid_device.send_feature_report(buffer_packet)
+                    
+                    time.sleep(0.005)
+                    
+                    apply_packet = [1, 101, 0, 0, 0, val_8bit, val_8bit, val_8bit]
+                    while len(apply_packet) < 37:
+                        apply_packet.append(0)
+                    self.mmjoy_hid_device.send_feature_report(apply_packet)
+                    
+                    if level == 0:
+                        time.sleep(0.005) # Пауза между стоп-пакетами для Ардуино
+
+                if level > 0:
+                    pct = int((level / 32767.0) * 100)
+                    print(f"[FFB] Исходный: {pct}% -> На мотор: {scaled_level} (ШИМ HID: {val_8bit}/255)")
+                else:
+                    print("[FFB] Отправлена серия команд СТОП")
+            except Exception as e:
+                print(f"[ОШИБКА HID] Не удалось отправить пакет: {e}")
+            return
+
         if not self.haptic or self.eff_id < 0: return
         new_eff = sdl2.SDL_HapticEffect()
         new_eff.type = sdl2.SDL_HAPTIC_CONSTANT
         new_eff.constant.length = length_ms
-        new_eff.constant.level = int(max(0, min(32767, level)))
+        new_eff.constant.level = scaled_level
         sdl2.SDL_HapticUpdateEffect(self.haptic, self.eff_id, ctypes.byref(new_eff))
         sdl2.SDL_HapticRunEffect(self.haptic, self.eff_id, 1)
 
@@ -255,40 +355,35 @@ class Il2VibroApp:
 
                 # --- ОБРАБОТКА ПАКЕТА 131 ---
                 if p_len == 131:
-                    # Двигатель
                     if self.get_mult("engine_work") > 0:
                         eng_val = data[37]
                         if 1 < eng_val < 120:
                             base_eng = (min(eng_val, 100) / 100.0) * MAX_FFB
                             curr_pwr = max(curr_pwr, (base_eng / 5) * self.get_mult("engine_work"))
-                            if data[24] == 72: # Форсаж
+                            if data[24] == 72: 
                                 curr_pwr = max(curr_pwr, (MAX_FFB / 1.5) * self.get_mult("engine_work"))
-                            if eng_val > 101: # Оверспид
+                            if eng_val > 101: 
                                 curr_pwr = max(curr_pwr, (MAX_FFB / 1.0) * self.get_mult("engine_work"))
-                    # Перегрузки
                     if self.get_mult("g_load") > 0:
                         val_raw = data[115]
                         if 1 <= val_raw <= 60:  
                             g_val = 0 if data[56] > 0 else 0.1 
                         elif val_raw > 60:
-                            g_val = (val_raw - 60) / 2 # 2. Если значение выше 60 (интенсивная перегрузка)
+                            g_val = (val_raw - 60) / 2 
                         else:
-                            g_val = 0 # 3. Во всех остальных случаях (ниже 57) — вибрации нет
+                            g_val = 0 
                         if g_val > 0:
-                            g_pwr = min(g_val, 1.0) # Ограничиваем сверху 1.0, чтобы не было перегруза по формуле
+                            g_pwr = min(g_val, 1.0) 
                             curr_pwr = max(curr_pwr, MAX_FFB * g_pwr * self.get_mult("g_load"))
                     if self.get_mult("g_neg") > 0 and data[100] > 180:
                         curr_pwr = max(curr_pwr, (MAX_FFB * 0.3) * self.get_mult("g_neg"))
-                    # Закрылки
                     if self.get_mult("flaps") > 0:
                         f_l, f_r = data[119], data[120]
                         if f_l != last_f_l or f_r != last_f_r:
                             curr_pwr = max(curr_pwr, (MAX_FFB / 2.0) * self.get_mult("flaps"))
                         last_f_l, last_f_r = f_l, f_r
-                    # Шасси
                     if self.get_mult("gear") > 0 and any(data[i] > 0 for i in range(53, 55)):
                         curr_pwr = max(curr_pwr, (MAX_FFB / 2.0) * self.get_mult("gear"))
-                    # Касание
                     if self.get_mult("touchdown") > 0:
                         current_touch_sum = sum(data[64:68])
                         if current_touch_sum != last_touch_sum:
@@ -299,38 +394,33 @@ class Il2VibroApp:
 
                 # --- ОБРАБОТКА ПАКЕТА 147 ---
                 elif p_len == 147:
-                    # Двигатель
                     if self.get_mult("engine_work") > 0:
                         eng_val = max(data[45], data[49])
                         if 1 < eng_val < 120:
                             base_eng = (min(eng_val, 100) / 100.0) * MAX_FFB
                             curr_pwr = max(curr_pwr, (base_eng / 5) * self.get_mult("engine_work"))
-                            if data[32] == 72: # Форсаж
+                            if data[32] == 72: 
                                 curr_pwr = max(curr_pwr, (MAX_FFB / 1.5) * self.get_mult("engine_work"))
-                            if eng_val > 101: # Оверспид
+                            if eng_val > 101: 
                                 curr_pwr = max(curr_pwr, MAX_FFB * self.get_mult("engine_work"))
-                    # Перегрузки
                     if self.get_mult("g_load") > 0:
                         val_raw = data[131]
                         if 1 <= val_raw <= 60:
                             g_val = 0 if data[67] > 0 else 0.1 
                         elif val_raw > 60:
-                            g_val = (val_raw - 60) / 2 # 2. Если значение выше 60 (интенсивная перегрузка)
+                            g_val = (val_raw - 60) / 2 
                         else:
-                            g_val = 0 # 3. Во всех остальных случаях (ниже 57) — вибрации нет
+                            g_val = 0 
                         if g_val > 0:
-                            g_pwr = min(g_val, 1.0) # Ограничиваем сверху 1.0, чтобы не было перегруза по формуле
+                            g_pwr = min(g_val, 1.0) 
                             curr_pwr = max(curr_pwr, MAX_FFB * g_pwr * self.get_mult("g_load"))
-                    # Закрылки
                     if self.get_mult("flaps") > 0:
                         f_l, f_r = data[135], data[136]
                         if f_l != last_f_l or f_r != last_f_r:
                             curr_pwr = max(curr_pwr, (MAX_FFB / 2.0) * self.get_mult("flaps"))
                         last_f_l, last_f_r = f_l, f_r
-                    # Шасси
                     if self.get_mult("gear") > 0 and any(data[i] > 0 for i in [69, 70, 73, 74]):
                         curr_pwr = max(curr_pwr, (MAX_FFB / 2.0) * self.get_mult("gear"))
-                    # Касание
                     if self.get_mult("touchdown") > 0:
                         current_touch_sum = sum(data[81:92])
                         if current_touch_sum != last_touch_sum:
@@ -339,22 +429,25 @@ class Il2VibroApp:
                             curr_len = 100
                         last_touch_sum = current_touch_sum
 
-                # --- УНИВЕРСАЛЬНЫЕ ЭФФЕКТЫ (ПО ДЛИНЕ ПАКЕТА) ---
-                # Стрельба
+                # --- УНИВЕРСАЛЬНЫЕ ЭФФЕКТЫ ---
                 if any(low <= p_len <= high for low, high in FIRE_RANGES):
                     if self.get_mult("fire") > 0:
                         curr_pwr, curr_len = MAX_FFB * self.get_mult("fire"), 40 
-                # Дамаг
                 elif p_len >= DMG_MIN:
                     if self.get_mult("damage") > 0:
                         ratio = (min(p_len, DMG_MAX) - DMG_MIN) / (DMG_MAX - DMG_MIN)
                         curr_pwr, curr_len = (MAX_FFB * ratio) * self.get_mult("damage"), 300
 
-                # --- ОТПРАВКА НА ДЖОЙСТИК ---
+                # --- ОТПРАВКА НА УСТРОЙСТВО ---
                 if curr_pwr > 0:
                     if time.time() - last_vibe_time > 0.02:
                         self.run_vibe(curr_pwr, max(curr_len, 60))
                         last_vibe_time = time.time()
+                else:
+                    if time.time() - last_vibe_time > 0.05:
+                        self.run_vibe(0, 0)
+                        last_vibe_time = time.time()
+                        time.sleep(0.01) # Дополнительное окно тишины для разгрузки МК
 
             except BlockingIOError: time.sleep(0.01)
             except: continue
@@ -362,8 +455,14 @@ class Il2VibroApp:
     def on_close(self):
         self.save_config()
         self.running = False
+        # Финальный жесткий стоп мотора перед выходом из программы
+        try: self.run_vibe(0, 0)
+        except: pass
         if self.haptic: sdl2.SDL_HapticClose(self.haptic)
         if self.joy: sdl2.SDL_JoystickClose(self.joy)
+        if self.mmjoy_hid_device:
+            try: self.mmjoy_hid_device.close()
+            except: pass
         self.sock.close()
         self.root.destroy()
 
