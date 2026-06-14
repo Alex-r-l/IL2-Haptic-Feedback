@@ -47,9 +47,10 @@
   * **Эмиттер** транзистора КТ972А ➡️ Общий минус (`GND`).
   * **Коллектор** транзистора ➡️ **Минус (-)** вибромоторчика.
   * **Плюс (+)** вибромоторчика ➡️ Напрямую к питанию `+5V` Arduino.
+  * **Конденсатор 10 мкФ** установлен между **Базой** транзистора КТ972А и **Минусом (GND)**. Он работает как аппаратный фильтр, сглаживая ШИМ-сигнал от микросхемы WS2811. Благодаря этому интенсивность вибрации меняется плавно и реалистично, без резких ступенчатых рывков.
 * **Защита схемы:**
   * Между контактами `+` и `-` моторчика параллельно впаивается защитный диод **1N4007** (катодом к плюсу) для гашения токов самоиндукции.
-  * Между контактами `GND` и `VDD` на плате Arduino установлен электролитический конденсатор емкостью **100 мкФ** для сглаживания просадок питания.
+  * Между контактами `GND` и `VDD` на плате Arduino установлен электролитический конденсатор емкостью **470 мкФ** для сглаживания просадок питания.
 
 #### Настройка конфигуратора MMJOY2:
 1. Откройте конфигуратор, перейдите на вкладку **LED**.
@@ -117,9 +118,10 @@ The application supports custom DIY joysticks based on **MMJOY2 firmware (v20151
   * **Emitter** of the KT972A ➡️ Common `GND`.
   * **Collector** of the KT972A ➡️ **Minus (-)** terminal of the vibration motor.
   * **Plus (+)** terminal of the motor ➡️ Directly to Arduino `+5V`.
+  * A **10 μF capacitor** is installed between the KT972A transistor's base and ground. It acts as a hardware filter, smoothing the PWM signal from the WS2811 microcircuit. This ensures smooth and realistic vibration intensity changes, without any sudden, stepwise jerks.
 * **Circuit Protection:**
   * A **1N4007** flyback diode must be soldered in parallel across the motor contacts (cathode to plus) to suppress inductive voltage spikes.
-  * A **100 µF** electrolytic capacitor is placed between `GND` and `VDD` on the Arduino board to smooth out voltage drops.
+  * A **470 µF** electrolytic capacitor is placed between `GND` and `VDD` on the Arduino board to smooth out voltage drops.
 
 #### MMJOY2 Configuration Setup:
 1. Open the MMJOY2 configurator and go to the **LED** tab.
