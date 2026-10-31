@@ -56,7 +56,8 @@
 1. Откройте конфигуратор, перейдите на вкладку **LED**.
 2. Включите чекбокс **`LED-RGB WS2811(порт B5)`**.
 3. В поле **«Цвет по умолчанию»** выберите **`White`**.
-4. Нажмите кнопку **«Записать в контроллер»**.
+4. ⚠️ **Важно для отображения в программе:** В поле имени устройства (Product Name) обязательно укажите **`Baloo_Joystik`**, иначе программа не увидит контроллер в списке.
+5. Нажмите кнопку **«Записать в контроллер»**.
 
 *Примечание об аппаратной инверсии:* Из-за логики работы открытого коллектора чипа WS2811 схема имеет инвертированную физическую структуру. Когда программа обратной связи не запущена, подтягивающий резистор держит транзистор открытым. Сильный физический удар по ручке джойстика при выключенном скрипте может вызвать кратковременный дребезг контактов тумблеров, из-за чего MMJoy2 гасит светодиод, и мотор уходит в постоянную непрерывную вибрацию. Это конструктивная особенность схемы, а не баг программы.
 
@@ -127,7 +128,8 @@ The application supports custom DIY joysticks based on **MMJOY2 firmware (v20151
 1. Open the MMJOY2 configurator and go to the **LED** tab.
 2. Check the **`LED-RGB WS2811(порт B5)`** option.
 3. Set the **"Default Color"** (Цвет по умолчанию) to **`White`**.
-4. Click **"Save to device"** (Записать в контроллер) in the bottom right corner.
+4. ⚠️ **Important for application detection:** In the device name (Product Name) field, make sure to set it to **`Baloo_Joystik`**, otherwise the application will not detect the controller in the list.
+5. Click **"Save to device"** (Записать в контроллер) in the bottom right corner.
 
 *Hardware Inversion Note:* Due to the open-collector architecture of the WS2811 chip, this circuit uses inverted physical logic. When the haptic feedback script is not running, the pull-up resistor keeps the transistor fully open. A hard physical impact on the joystick grip while the script is off can cause momentary switch contact bounce, causing MMJoy2 to turn off the LED state and triggering a continuous, infinite motor vibration. This is a hardware design trait and not a software bug.
 
