@@ -14,7 +14,7 @@ import hid
 CONFIG_FILE = "config.json"
 UDP_IP = "127.0.0.1"
 UDP_PORT = 29373
-APP_VERSION = "IL-2 Haptic Feedback v1.7"  # Универсальная версия с автопоиском по имени!
+APP_VERSION = "IL-2 Haptic Feedback v1.8"
 
 # Рабочие границы мотора, определенные тестом
 VIBE_MIN = 18000
@@ -79,6 +79,8 @@ class Il2VibroApp:
         self.is_mmjoy_mode = False
         
         self.last_packet_time = 0
+        self.last_mmjoy_stop_time = 0
+        self.is_testing = False  # Флаг для защиты теста от фонового сброса
         
         self.settings = self.load_config()
         self.cur_lang = self.settings.get("lang", "RU")
@@ -132,23 +134,25 @@ class Il2VibroApp:
         
         all_devices = []
         
+        # 1. Собираем игровые устройства через SDL (чистые имена)
         for i in range(sdl2.SDL_NumJoysticks()):
             j = sdl2.SDL_JoystickOpen(i)
             if j:
-                if sdl2.SDL_JoystickIsHaptic(j):
-                    name = sdl2.SDL_JoystickNameForIndex(i).decode('utf-8', errors='ignore')
+                name = sdl2.SDL_JoystickNameForIndex(i).decode('utf-8', errors='ignore')
+                if name not in all_devices:
                     all_devices.append(name)
                 sdl2.SDL_JoystickClose(j)
                 
+        # 2. Собираем HID-устройства по системным идентификаторам (Usage 4/5 - Джойстики/Геймпады) без приставки
         try:
             for device_info in hid.enumerate():
-                if device_info['interface_number'] == 0 and device_info['product_string']:
-                    prod_name = str(device_info['product_string'])
-                    prod_name_lower = prod_name.lower()
-                    if "mmjoy" in prod_name_lower or "joystik" in prod_name_lower or "baloo" in prod_name_lower:
-                        all_devices.append(f"[MMJoy2 HID] {prod_name}")
-        except:
-            pass
+                if device_info.get('usage_page') == 1 and device_info.get('usage') in [4, 5]:
+                    prod_name = device_info.get('product_string')
+                    if prod_name:
+                        if prod_name not in all_devices:
+                            all_devices.append(prod_name)
+        except Exception as e:
+            print(f"[ОШИБКА HID ENUM]: {e}")
 
         self.joy_combo['values'] = all_devices
 
@@ -165,24 +169,29 @@ class Il2VibroApp:
 
         if not name: return False
 
-        if name.startswith("[MMJoy2 HID]"):
-            clean_name = name.replace("[MMJoy2 HID] ", "")
-            try:
-                for device_info in hid.enumerate():
-                    if device_info['interface_number'] == 0 and device_info['product_string'] == clean_name:
+        # Проверяем, есть ли такое устройство среди HID-контроллеров
+        try:
+            for device_info in hid.enumerate():
+                if device_info.get('product_string') == name:
+                    if device_info.get('interface_number', 0) == 0:
                         self.mmjoy_hid_path = device_info['path']
                         break
-                
-                if self.mmjoy_hid_path:
-                    self.mmjoy_hid_device = hid.device()
-                    self.mmjoy_hid_device.open_path(self.mmjoy_hid_path)
-                    self.is_mmjoy_mode = True
-                    print(f"[УСПЕХ] Интеллектуальный HID-канал для '{clean_name}' открыт.")
-                    return True
-            except Exception as e:
-                print(f"[ОШИБКА] Не удалось открыть HID-канал: {e}")
-            return False
+            if not self.mmjoy_hid_path:
+                for device_info in hid.enumerate():
+                    if device_info.get('product_string') == name:
+                        self.mmjoy_hid_path = device_info['path']
+                        break
+            
+            if self.mmjoy_hid_path:
+                self.mmjoy_hid_device = hid.device()
+                self.mmjoy_hid_device.open_path(self.mmjoy_hid_path)
+                self.is_mmjoy_mode = True
+                print(f"[УСПЕХ] HID-канал для '{name}' открыт.")
+                return True
+        except Exception as e:
+            print(f"[ОШИБКА HID] Не удалось открыть HID-канал: {e}")
 
+        # Если через HID не открылось, пробуем через стандартный SDL Haptic
         for i in range(sdl2.SDL_NumJoysticks()):
             if sdl2.SDL_JoystickNameForIndex(i).decode('utf-8', errors='ignore') == name:
                 self.joy = sdl2.SDL_JoystickOpen(i)
@@ -191,6 +200,7 @@ class Il2VibroApp:
                     eff = sdl2.SDL_HapticEffect()
                     eff.type = sdl2.SDL_HAPTIC_CONSTANT
                     self.eff_id = sdl2.SDL_HapticNewEffect(self.haptic, ctypes.byref(eff))
+                    print(f"[УСПЕХ] SDL Haptic канал для '{name}' открыт.")
                     return True
         return False
 
@@ -247,9 +257,9 @@ class Il2VibroApp:
         self.lbl_udp = ttk.Label(main_frame, text=f"{L['listen']} {UDP_IP}:{UDP_PORT}", font=("Arial", 9))
         self.lbl_udp.pack(pady=2)
         self.credits_label = ttk.Label(footer_frame, 
-                                      text=L["credits"], 
-                                      font=("Verdana", 8, "italic"), 
-                                      foreground="#888888")
+                                    text=L["credits"], 
+                                    font=("Verdana", 8, "italic"), 
+                                    foreground="#888888")
         self.credits_label.pack(pady=5)
 
     def update_ui_texts(self):
@@ -284,23 +294,15 @@ class Il2VibroApp:
         
         # Интеллектуальное сжатие диапазона под физику мотора (18000 - 24000) с коррекцией нелинейности
         if level > 0:
-            # Нормализуем вход от игры в диапазон от 0.0 до 1.0
             normalized = level / 32767.0
-            
-            # Применяем степень 1.45, чтобы сместить физическую середину на 19500
             corrected_ratio = normalized ** 1.5
-            
-            # Масштабируем в твой рабочий диапазон
             scaled_level = VIBE_MIN + int(corrected_ratio * (VIBE_MAX - VIBE_MIN))
         else:
             scaled_level = 0
 
         if self.is_mmjoy_mode and self.mmjoy_hid_device:
             try:
-                # Инвертируем ШИМ (255 - полная тишина, 0 - максимальное напряжение)
                 val_8bit = (255 - int((scaled_level / 32767.0) * 255)) if scaled_level > 0 else 255
-                
-                # Защита от несрабатывания СТОП: шлем серию пакетов при выключении
                 loops = 3 if level == 0 else 1
                 
                 for _ in range(loops):
@@ -317,7 +319,7 @@ class Il2VibroApp:
                     self.mmjoy_hid_device.send_feature_report(apply_packet)
                     
                     if level == 0:
-                        time.sleep(0.005) # Пауза между стоп-пакетами для Ардуино
+                        time.sleep(0.005)
 
                 if level > 0:
                     pct = int((level / 32767.0) * 100)
@@ -345,9 +347,20 @@ class Il2VibroApp:
         last_f_l, last_f_r = 0, 0
         last_touch_sum = 0  
         g_val = 0
-
+        
         while self.running:
             try:
+                # --- АВАРИЙНЫЙ СБРОС MMJOY ---
+                # Если телеметрии нет 3 секунды,
+                # отправляем команду остановки вибрации.
+                if self.is_mmjoy_mode and self.mmjoy_hid_device:
+                    current_time = time.time()
+
+                    if current_time - self.last_packet_time >= 3.0:
+                        if current_time - self.last_mmjoy_stop_time >= 3.0:
+                            self.run_vibe(0, 0)
+                            self.last_mmjoy_stop_time = current_time
+
                 data, addr = self.sock.recvfrom(2048)
                 self.last_packet_time = time.time()
                 p_len = len(data)
@@ -455,7 +468,6 @@ class Il2VibroApp:
     def on_close(self):
         self.save_config()
         self.running = False
-        # Финальный жесткий стоп мотора перед выходом из программы
         try: self.run_vibe(0, 0)
         except: pass
         if self.haptic: sdl2.SDL_HapticClose(self.haptic)
